@@ -1,0 +1,60 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    ports:
+      - "5432:5432"
+  
+  keycloak:
+    image: quay.io/keycloak/keycloak:17.0.0-legacy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./startup.cli:/opt/jboss/startup-scripts/startup.cli
+      - ./js-console.war:/opt/jboss/keycloak/standalone/deployments/js-console.war:z
+      - ./realm.json:/realm.json
+    environment:
+      INFINISPAN_HOST: "infinispan"
+      DB_VENDOR: POSTGRES
+      DB_ADDR: postgres
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_SCHEMA: public
+      DB_PASSWORD: keycloak
+      KEYCLOAK_USER: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      JSTAT: "${KEYCLOAK_JSTAT:-false}"
+
+      JAVA_OPTS: ${KEYCLOAK_JVM_MEMORY:--Xms64m -Xmx2g -XX:MetaspaceSize=96M -XX:MaxMetaspaceSize=256m} -Djava.net.preferIPv4Stack=true -Djboss.modules.system.pkgs=org.jboss.byteman -Djava.awt.headless=true
+      HTTP_MAX_CONNECTIONS: ${KEYCLOAK_HTTP_MAX_CONNECTIONS:-50000}
+      AJP_MAX_CONNECTIONS: ${KEYCLOAK_AJP_MAX_CONNECTIONS:-50000}
+      WORKER_IO_THREADS: ${KEYCLOAK_WORKER_IO_THREADS:-2}
+      WORKER_TASK_MAX_THREADS: ${KEYCLOAK_WORKER_TASK_MAX_THREADS:-16}
+      DS_MIN_POOL_SIZE: ${KEYCLOAK_DS_MIN_POOL_SIZE:-10}
+      DS_MAX_POOL_SIZE: ${KEYCLOAK_DS_MAX_POOL_SIZE:-100}
+      DS_POOL_PREFILL: "${KEYCLOAK_DS_POOL_PREFILL:-true}"
+      DS_PS_CACHE_SIZE: ${KEYCLOAK_DS_PS_CACHE_SIZE:-100}
+      JGROUPS_DISCOVERY_PROTOCOL: JDBC_PING
+      JGROUPS_DISCOVERY_PROPERTIES: datasource_jndi_name=java:jboss/datasources/KeycloakDS,info_writer_sleep_time=500,initialize_sql="CREATE TABLE IF NOT EXISTS JGROUPSPING ( own_addr varchar(200) NOT NULL, cluster_name varchar(200) NOT NULL, created timestamp default current_timestamp, ping_data BYTEA, constraint PK_JGROUPSPING PRIMARY KEY (own_addr, cluster_name))"
+      CACHE_OWNERS_COUNT: 2
+      KEYCLOAK_IMPORT: /realm.json
+    links:
+      - postgres
+      - infinispan
+  infinispan:
+    image: infinispan/server:13.0.6.Final
+    ports:
+      - "11222:11222"
+      - 9990:9990
+    volumes:
+      - ./infinispan-custom.xml:/opt/infinispan/server/conf/infinispan-custom.xml
+      - ./postgresql-42.2.20.jar:/opt/infinispan/server/lib/postgresql-42.2.20.jar
+      - ./infinispan-jgroups.xml:/opt/infinispan/server/conf/jgroups.xml
+    entrypoint: ["/opt/infinispan/bin/server.sh", "-c", "infinispan-custom.xml"]
+  
+    
+  
